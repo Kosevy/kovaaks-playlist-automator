@@ -1,0 +1,24 @@
+# Entorno virtual
+.venv/
+env/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Configuración local (evita subir tu Steam ID / rutas privadas)
+config.json
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de pruebas / temporales
+.pytest_cache/
+.coverage
+htmlcov/
