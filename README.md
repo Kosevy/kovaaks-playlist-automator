@@ -7,44 +7,50 @@ Desktop application in Python with CustomTkinter that automates the extraction o
 ## Features
 
 - Modern Dark Interface: Designed with CustomTkinter in native dark mode.
-- Configuration Persistence: Automatically saves your credentials and path information in `config.json` when the app restarts or values change.
-- Intelligent Extraction Using Regex:
-  - Steam ID: Extracts exactly 17 consecutive digits (`\d{17}`) from plain text or Steam URLs (`steamcommunity.com/profiles/7656...`).
-  - Benchmark ID: Extracts the numeric ID from EVXL / KovaaK's links or numeric input.
-- Path Detection and Browse Dialog:
-  - Looks for Steam's default path (`C:\Program Files (x86)\Steam\steamapps\common\FPSAimTrainer\FPSAimTrainer\Saved\SaveGames\Playlists`) or lets you choose any folder through a native Windows file browser.
-- Continuous Score Calculation:
-  $$\text{Continuous Score} = \text{Base Range} + \frac{\text{Current Score} - \text{Minimum Score}}{\text{Maximum Score} - \text{Minimum Score}}$$
-- Recommended Sensitivity with Dynamic Fallback:
-  - Extracts the median sensitivity from the Fuchsia range.
-  - If there are not enough data points in Fuchsia, it falls back in cascade (Indigo → Lavender → Cerulean → ...), indicating the source range in the interface.
-- Native KovaaK's Structure (5 repetitions):
-  - Generates the JSON file in KovaaK's native format (`playCount: 5`).
-  - Sanitizes disallowed Windows characters (`< > : " / \ | ? *`).
-  - Automatically handles collisions just like Windows Explorer (`name (1).json`, `name (2).json`).
-- Asynchronous Execution Without Freezing:
-  - HTTP requests in the background with full error handling (timeouts, HTTP errors, 10060, invalid paths).
+- **Persistencia de Configuración**: Guarda automáticamente en `config.json` tus credenciales e información de rutas al reiniciar la app o cambiar de valores.
+- **Resolución Avanzada de Benchmarks y URLs de EVXL**:
+  - **URLs amigables de EVXL**: Soporta links con la estructura completa:
+    `https://evxl.app/u/{usuario}/{benchmark}/{dificultad}?tab=charts` (ej. `https://evxl.app/u/crimstag/Viscose%20Benchmarks%20S2/Medium?tab=charts`).
+    Resuelve dinámicamente el nombre del benchmark y dificultad contra el catálogo oficial de EVXL (129+ benchmarks).
+  - **Autodetección de Steam ID**: Si el campo de Steam ID está vacío y la URL de EVXL contiene un usuario (`/u/{usuario}/...`), la aplicación detecta y resuelve automáticamente su Steam ID64.
+  - **Formatos alternativos**: Acepta también URLs directas con `benchmarkId=XXXX`, rutas de benchmark (`/benchmarks/{nombre}/{dificultad}`) o IDs numéricos directos (ej. `2336`).
+- **Extracción Inteligente por Regex**:
+  - **Steam ID**: Extrae exactamente 17 dígitos consecutivos (`\d{17}`) a partir de texto directo o URLs de Steam (`steamcommunity.com/profiles/7656...`).
+- **Detección de Rutas y Diálogo de Exploración**:
+  - Busca la ruta predeterminada de Steam (`C:\Program Files (x86)\Steam\steamapps\common\FPSAimTrainer\FPSAimTrainer\Saved\SaveGames\Playlists`) o permite seleccionar cualquier carpeta mediante un explorador nativo de Windows.
+- **Cálculo de Puntaje Continuo**:
+  $$\text{Puntaje Continuo} = \text{Rango Base} + \frac{\text{Score Actual} - \text{Score Mínimo}}{\text{Score Máximo} - \text{Score Mínimo}}$$
+- **Sensibilidad Recomendada con Fallback Dinámico**:
+  - Extrae la mediana de sensibilidad del rango **Fuchsia**.
+  - Si no existen datos suficientes en Fuchsia, realiza un fallback en cascada (Indigo → Lavender → Cerulean → ...), indicando el rango origen en la interfaz.
+- **Estructura Nativa de KovaaK's (5 repeticiones)**:
+  - Genera el archivo JSON con formato nativo de KovaaK's (`playCount: 5`).
+  - Sanitiza caracteres no permitidos en Windows (`< > : " / \ | ? *`).
+  - Manejo automático de colisiones idéntico a Windows Explorer (`nombre (1).json`, `nombre (2).json`).
+- **Ejecución Asíncrona sin Congelamiento**:
+  - Peticiones HTTP en segundo plano con control de errores completo (timeouts, HTTP errors, 10060, rutas inválidas).
 
 ---
 
-## Project Structure
+## Estructura del Proyecto
 
 ```text
 KPA/
 ├── core/
 │   ├── __init__.py
-│   ├── api_client.py         # HTTP client with custom headers
-│   ├── config.py             # Configuration persistence and config.json handling
-│   ├── extractor.py          # Regex for Steam ID and Benchmark ID
-│   └── playlist_service.py   # Score calculation, fallback logic, and JSON generation
+│   ├── api_client.py         # Cliente HTTP con headers personalizados
+│   ├── benchmark_resolver.py # Resolutor dinámico de catálogo EVXL y URLs
+│   ├── config.py             # Manejo de persistencia y config.json
+│   ├── extractor.py          # Extractor Regex y parseo de entradas
+│   └── playlist_service.py   # Lógica de cálculo, fallback y generación JSON
 ├── ui/
 │   ├── __init__.py
-│   └── app.py                # Main CustomTkinter window and threading
+│   └── app.py                # Ventana principal CustomTkinter y threading
 ├── tests/
-│   ├── test_pipeline.py      # Integration test with real endpoints
-│   └── test_unit.py          # Unit tests for extractor and logic
+│   ├── test_pipeline.py      # Test de integración con endpoints reales
+│   └── test_unit.py          # Pruebas unitarias de extractor y lógica
 ├── requirements.txt
-├── main.py                   # Entry point
+├── main.py                   # Punto de entrada
 └── README.md
 ```
 

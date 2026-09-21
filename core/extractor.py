@@ -1,5 +1,8 @@
 import re
-from typing import Optional
+from typing import Optional, Dict, Any
+from core.benchmark_resolver import BenchmarkResolver
+
+_resolver = BenchmarkResolver()
 
 
 def extract_steam_id(raw_input: str) -> str:
@@ -21,34 +24,20 @@ def extract_steam_id(raw_input: str) -> str:
     return match.group(1)
 
 
+def extract_benchmark_info(raw_input: str) -> dict:
+    """
+    Resuelve la información completa del Benchmark a partir de texto plano,
+    ID numérico o URLs de EVXL (ej. /u/{usuario}/{benchmark}/{dificultad}).
+    Retorna dict con 'benchmark_id', 'benchmark_name', 'difficulty', 'author'.
+    """
+    return _resolver.resolve_benchmark(raw_input)
+
+
 def extract_benchmark_id(raw_input: str) -> str:
     """
-    Extrae el ID numérico de un Benchmark a partir de texto plano o de una URL
-    (ej. https://evxl.app/benchmarks/2336 o parámetro benchmarkId=2336).
-    Lanza ValueError si no se encuentra un ID numérico.
+    Extrae el ID numérico de un Benchmark a partir de texto plano, ID directo
+    o una URL de EVXL / KovaaK's.
+    Lanza ValueError si no se encuentra o no se puede resolver.
     """
-    if not raw_input:
-        raise ValueError("El campo de Benchmark ID no puede estar vacío.")
-
-    cleaned = raw_input.strip()
-    
-    # 1. Intentar extraer de patrones de URL conocidos
-    url_patterns = [
-        r"benchmarks?/(\d+)",
-        r"benchmarkId=(\d+)",
-        r"bench/(\d+)"
-    ]
-    for pattern in url_patterns:
-        match = re.search(pattern, cleaned, re.IGNORECASE)
-        if match:
-            return match.group(1)
-
-    # 2. Si no es URL con ruta específica, buscar cualquier grupo de dígitos
-    match = re.search(r"\b(\d+)\b", cleaned)
-    if match:
-        return match.group(1)
-
-    raise ValueError(
-        "Benchmark ID inválido: No se detectó un identificador numérico "
-        "(ej. 2336 o https://evxl.app/benchmarks/2336)."
-    )
+    info = extract_benchmark_info(raw_input)
+    return info["benchmark_id"]

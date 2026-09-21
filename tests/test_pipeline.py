@@ -5,15 +5,21 @@ import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.extractor import extract_benchmark_id
 from core.api_client import KovaaksApiClient
 from core.playlist_service import PlaylistService
 
 def test_pipeline():
+    url = "https://evxl.app/u/crimstag/Viscose%20Benchmarks%20S2/Medium?tab=charts"
+    bench_id = extract_benchmark_id(url)
+    print(f"Resolved benchmark ID from EVXL URL: {bench_id}")
+    assert bench_id == "2336"
+
     client = KovaaksApiClient()
     print("Fetching progress...")
-    prog = client.fetch_player_progress("2336", "76561198444816419")
+    prog = client.fetch_player_progress(bench_id, "76561198444816419")
     print("Fetching sensitivity...")
-    sens = client.fetch_sensitivity_distributions("2336")
+    sens = client.fetch_sensitivity_distributions(bench_id)
 
     service = PlaylistService()
     with tempfile.TemporaryDirectory() as td:

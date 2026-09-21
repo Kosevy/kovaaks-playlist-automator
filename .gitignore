@@ -11,6 +11,7 @@ __pycache__/
 
 # Configuración local (evita subir tu Steam ID / rutas privadas)
 config.json
+.benchmarks_cache.json
 
 # IDEs y editores
 .vscode/

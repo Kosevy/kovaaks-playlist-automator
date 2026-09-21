@@ -7,7 +7,8 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
 from core.config import ConfigManager
-from core.extractor import extract_steam_id, extract_benchmark_id
+from core.extractor import extract_steam_id, extract_benchmark_id, extract_benchmark_info
+from core.benchmark_resolver import BenchmarkResolver
 from core.api_client import KovaaksApiClient
 from core.playlist_service import PlaylistService
 
@@ -29,6 +30,7 @@ class KPAApp(ctk.CTk):
         # 2. Servicios del Core
         self.config_manager = ConfigManager()
         self.config_data = self.config_manager.load_config()
+        self.benchmark_resolver = BenchmarkResolver()
         self.api_client = KovaaksApiClient()
         self.playlist_service = PlaylistService()
 
@@ -290,13 +292,11 @@ class KPAApp(ctk.CTk):
         raw_dir = self.entry_dir.get().strip()
         raw_name = self.entry_name.get().strip() or "improve-weaknesses"
 
-        # Validaciones preliminares
-        try:
-            steam_id = extract_steam_id(raw_steam)
-            benchmark_id = extract_benchmark_id(raw_bench)
-        except ValueError as e:
-            self._append_text(f"[ERROR DE VALIDACIÓN] {e}\n\n")
-            messagebox.showerror("Dato Inválido", str(e))
+        # Validaciones básicas preliminares
+        if not raw_bench:
+            msg = "El campo de Benchmark ID o URL no puede estar vacío."
+            self._append_text(f"[ERROR DE VALIDACIÓN] {msg}\n\n")
+            messagebox.showerror("Benchmark Faltante", msg)
             return
 
         if not raw_dir:
@@ -314,32 +314,65 @@ class KPAApp(ctk.CTk):
         # Ejecutar en segundo plano para no congelar la UI
         worker_thread = threading.Thread(
             target=self._worker_process,
-            args=(benchmark_id, steam_id, raw_dir, raw_name),
+            args=(raw_bench, raw_steam, raw_dir, raw_name),
             daemon=True
         )
-        self._update_ui_state(True, "Conectando con KovaaK's y EVXL...")
+        self._update_ui_state(True, "Resolviendo benchmark y conectando...")
         worker_thread.start()
 
     def _worker_process(
         self,
-        benchmark_id: str,
-        steam_id: str,
+        raw_bench: str,
+        raw_steam: str,
         destination_dir: str,
         requested_name: str
     ):
-        """Hilo secundario que realiza las peticiones HTTP y cálculos."""
+        """Hilo secundario que resuelve benchmark, realiza las peticiones HTTP y cálculos."""
         try:
-            # 1. Petición de progreso
+            # 1. Resolver Benchmark (soporta URLs amigables /u/{usuario}/{benchmark}/{dificultad})
+            self.after(0, lambda: self._append_text("► Analizando identificador o URL del Benchmark...\n"))
+            bench_info = self.benchmark_resolver.resolve_benchmark(raw_bench)
+            benchmark_id = bench_info["benchmark_id"]
+
+            bench_name = bench_info.get("benchmark_name")
+            bench_diff = bench_info.get("difficulty")
+            author = bench_info.get("author")
+
+            if bench_name:
+                diff_str = f" [{bench_diff}]" if bench_diff else ""
+                self.after(0, lambda b=bench_name, d=diff_str, bid=benchmark_id: self._append_text(
+                    f"✔ Benchmark identificado: {b}{d} (ID: {bid})\n"
+                ))
+
+            # 2. Si no se ingresó Steam ID pero la URL contiene un usuario, intentar resolverlo
+            if not raw_steam and author:
+                self.after(0, lambda a=author: self._append_text(
+                    f"► Intentando resolver Steam ID para el usuario '{a}' desde la URL...\n"
+                ))
+                resolved_steam = self.benchmark_resolver.resolve_steam_vanity_or_id(author)
+                if resolved_steam:
+                    raw_steam = resolved_steam
+                    self.after(0, lambda sid=resolved_steam, a=author: (
+                        self.entry_steam.delete(0, "end"),
+                        self.entry_steam.insert(0, sid),
+                        self._append_text(f"✔ Steam ID detectado automáticamente: {sid} ({a})\n"),
+                        self._save_current_values()
+                    ))
+
+            # 3. Validar y extraer Steam ID
+            steam_id = extract_steam_id(raw_steam)
+
+            # 4. Petición de progreso del jugador
             self.after(0, lambda: self._append_text(
                 f"► Obteniendo progreso del jugador (Benchmark ID: {benchmark_id}, Steam ID: {steam_id})...\n"
             ))
             progress_data = self.api_client.fetch_player_progress(benchmark_id, steam_id)
 
-            # 2. Petición de sensibilidades
+            # 5. Petición de sensibilidades
             self.after(0, lambda: self._append_text("► Obteniendo distribuciones de sensibilidad de EVXL...\n"))
             sens_data = self.api_client.fetch_sensitivity_distributions(benchmark_id)
 
-            # 3. Procesar y generar archivo de playlist
+            # 6. Procesar y generar archivo de playlist
             self.after(0, lambda: self._append_text("► Calculando debilidades y estructurando playlist...\n"))
             result = self.playlist_service.process_and_generate_playlist(
                 progress_data=progress_data,
@@ -348,15 +381,15 @@ class KPAApp(ctk.CTk):
                 requested_name=requested_name
             )
 
-            # 4. Mostrar resultados exitosos en la UI
-            self.after(0, lambda: self._on_success_callback(result))
+            # 7. Mostrar resultados exitosos en la UI
+            self.after(0, lambda: self._on_success_callback(result, bench_info))
 
         except Exception as e:
             # Captura y muestra de cualquier excepción (conexión, timeouts, filesystem, etc.)
             error_msg = str(e)
             self.after(0, lambda: self._on_error_callback(error_msg))
 
-    def _on_success_callback(self, result: Dict[str, Any]):
+    def _on_success_callback(self, result: Dict[str, Any], bench_info: Dict[str, Any]):
         """Actualiza la UI tras una ejecución exitosa."""
         self._update_ui_state(False, "Playlist generada con éxito.")
 
@@ -364,10 +397,20 @@ class KPAApp(ctk.CTk):
         file_path = result["file_path"]
         pl_name = result["playlist_name"]
 
+        bench_display = bench_info.get("benchmark_name")
+        if bench_display:
+            if bench_info.get("difficulty"):
+                bench_display = f"{bench_display} [{bench_info['difficulty']}] (ID: {bench_info['benchmark_id']})"
+            else:
+                bench_display = f"{bench_display} (ID: {bench_info['benchmark_id']})"
+        else:
+            bench_display = f"ID: {bench_info['benchmark_id']}"
+
         out = []
         out.append("\n==========================================================")
         out.append("  ✔ PLAYLIST GENERADA EXITOSAMENTE")
         out.append("==========================================================")
+        out.append(f"Benchmark        : {bench_display}")
         out.append(f"Archivo guardado : {file_path}")
         out.append(f"Nombre playlist  : {pl_name}")
         out.append(f"Escenarios       : {len(scenarios)} (5 repeticiones cada uno)")

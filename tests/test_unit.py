@@ -29,9 +29,17 @@ class TestExtractor(unittest.TestCase):
         self.assertEqual(extract_benchmark_id("https://evxl.app/benchmarks/2336"), "2336")
         self.assertEqual(extract_benchmark_id("https://kovaaks.com/webapp?benchmarkId=2336"), "2336")
 
+    def test_extract_benchmark_evxl_full_url(self):
+        url = "https://evxl.app/u/crimstag/Viscose%20Benchmarks%20S2/Medium?tab=charts"
+        self.assertEqual(extract_benchmark_id(url), "2336")
+
+    def test_extract_benchmark_evxl_benchmarks_route(self):
+        url = "https://evxl.app/benchmarks/Viscose%20Benchmarks%20S2/Medium"
+        self.assertEqual(extract_benchmark_id(url), "2336")
+
     def test_extract_benchmark_id_invalid(self):
         with self.assertRaises(ValueError):
-            extract_benchmark_id("no_id_here")
+            extract_benchmark_id("non_existent_benchmark_xyz")
 
 
 class TestPlaylistService(unittest.TestCase):
