@@ -79,7 +79,7 @@ class KPAApp(ctk.CTk):
 
         self.entry_steam = ctk.CTkEntry(
             form_frame,
-            placeholder_text="ej. 76561198444816419 o https://steamcommunity.com/profiles/76561198444816419"
+            placeholder_text="ej. 76561198000000000 o https://steamcommunity.com/profiles/76561198000000000"
         )
         self.entry_steam.grid(row=0, column=1, columnspan=2, padx=(0, 15), pady=(12, 6), sticky="ew")
 

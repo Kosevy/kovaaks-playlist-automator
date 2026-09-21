@@ -1,56 +1,57 @@
 # KPA - KovaaK's Playlist Automator
 
-Desktop application in Python with CustomTkinter that automates the extraction of statistics from the [evxl.app](https://evxl.app) platform and KovaaK's backend to generate playlist files (`.json`) with the 5 scenarios where the player has the greatest room for improvement in a specific benchmark.
+A desktop application built in Python with **CustomTkinter** that automates stats extraction from the [evxl.app](https://evxl.app) platform and KovaaK's backend. It analyzes your benchmark performance and generates native KovaaK's playlist files (`.json`) containing the 5 scenarios where you have the highest potential for improvement.
 
 ---
 
 ## Features
 
-- Modern Dark Interface: Designed with CustomTkinter in native dark mode.
-- **Persistencia de Configuración**: Guarda automáticamente en `config.json` tus credenciales e información de rutas al reiniciar la app o cambiar de valores.
-- **Resolución Avanzada de Benchmarks y URLs de EVXL**:
-  - **URLs amigables de EVXL**: Soporta links con la estructura completa:
-    `https://evxl.app/u/{usuario}/{benchmark}/{dificultad}?tab=charts` (ej. `https://evxl.app/u/crimstag/Viscose%20Benchmarks%20S2/Medium?tab=charts`).
-    Resuelve dinámicamente el nombre del benchmark y dificultad contra el catálogo oficial de EVXL (129+ benchmarks).
-  - **Autodetección de Steam ID**: Si el campo de Steam ID está vacío y la URL de EVXL contiene un usuario (`/u/{usuario}/...`), la aplicación detecta y resuelve automáticamente su Steam ID64.
-  - **Formatos alternativos**: Acepta también URLs directas con `benchmarkId=XXXX`, rutas de benchmark (`/benchmarks/{nombre}/{dificultad}`) o IDs numéricos directos (ej. `2336`).
-- **Extracción Inteligente por Regex**:
-  - **Steam ID**: Extrae exactamente 17 dígitos consecutivos (`\d{17}`) a partir de texto directo o URLs de Steam (`steamcommunity.com/profiles/7656...`).
-- **Detección de Rutas y Diálogo de Exploración**:
-  - Busca la ruta predeterminada de Steam (`C:\Program Files (x86)\Steam\steamapps\common\FPSAimTrainer\FPSAimTrainer\Saved\SaveGames\Playlists`) o permite seleccionar cualquier carpeta mediante un explorador nativo de Windows.
-- **Cálculo de Puntaje Continuo**:
-  $$\text{Puntaje Continuo} = \text{Rango Base} + \frac{\text{Score Actual} - \text{Score Mínimo}}{\text{Score Máximo} - \text{Score Mínimo}}$$
-- **Sensibilidad Recomendada con Fallback Dinámico**:
-  - Extrae la mediana de sensibilidad del rango **Fuchsia**.
-  - Si no existen datos suficientes en Fuchsia, realiza un fallback en cascada (Indigo → Lavender → Cerulean → ...), indicando el rango origen en la interfaz.
-- **Estructura Nativa de KovaaK's (5 repeticiones)**:
-  - Genera el archivo JSON con formato nativo de KovaaK's (`playCount: 5`).
-  - Sanitiza caracteres no permitidos en Windows (`< > : " / \ | ? *`).
-  - Manejo automático de colisiones idéntico a Windows Explorer (`nombre (1).json`, `nombre (2).json`).
-- **Ejecución Asíncrona sin Congelamiento**:
-  - Peticiones HTTP en segundo plano con control de errores completo (timeouts, HTTP errors, 10060, rutas inválidas).
+- **Modern Dark UI**: Clean desktop interface styled with CustomTkinter in default dark mode.
+- **Persistent Configuration**: Automatically saves your credentials, preferences, and paths to `config.json` so you don't have to re-enter them on restart.
+- **Advanced Benchmark & EVXL URL Resolution**:
+  - **Full EVXL URL Support**: Compatible with standard user benchmark URLs:  
+    `https://evxl.app/u/{user}/{benchmark_name}/{difficulty}?tab=charts`.
+  - **Dynamic Catalog Discovery**: Analyzes EVXL's application bundles dynamically to query against the complete official catalog (129+ benchmarks) without requiring manual maintenance.
+  - **Smart In-Memory & Local Cache**: Cached locally (24h TTL) to deliver sub-millisecond lookups on repeated executions.
+  - **Automatic Steam ID Detection**: If the Steam ID input is left blank and an EVXL user URL is provided, the application resolves the user's Steam64 ID via EVXL's Steam profile API (`/api/steam`) and auto-fills the field.
+  - **Alternative Formats**: Also supports direct URLs with `benchmarkId=XXXX`, `/benchmarks/{name}/{difficulty}`, or numeric IDs (e.g., `2336`).
+- **Precise Regex Parsing**:
+  - **Steam ID**: Accurately extracts exactly 17 consecutive digits (`\d{17}`) from raw text or Steam community profile links.
+- **Path Auto-Detection & Explorer Dialog**:
+  - Automatically detects Steam's default playlists directory (`C:\Program Files (x86)\Steam\steamapps\common\FPSAimTrainer\FPSAimTrainer\Saved\SaveGames\Playlists`) or lets you select any custom path using a native Windows folder browser.
+- **Continuous Score Algorithm**:
+  $$\text{Continuous Score} = \text{Base Rank} + \frac{\text{Current Score} - \text{Minimum Score}}{\text{Maximum Score} - \text{Minimum Score}}$$
+- **Recommended Sensitivity with Cascade Fallback**:
+  - Extracts the median sensitivity for the target **Fuchsia** tier.
+  - If Fuchsia lacks sufficient player data for a scenario, it automatically falls back in descending order (Indigo → Lavender → Cerulean → ...), indicating the source rank in the results output.
+- **Native KovaaK's Playlist Structure (5 Play Count)**:
+  - Outputs standard KovaaK's JSON playlists (`playCount: 5`).
+  - Sanitizes invalid Windows filesystem characters (`< > : " / \ | ? *`).
+  - Automatically resolves name collisions identical to Windows File Explorer (`name (1).json`, `name (2).json`).
+- **Asynchronous Execution**:
+  - Background threading (`threading.Thread`) prevents the UI from freezing during network requests, with comprehensive error handling (timeouts, HTTP errors, 10060, invalid directories).
 
 ---
 
-## Estructura del Proyecto
+## Project Structure
 
 ```text
 KPA/
 ├── core/
 │   ├── __init__.py
-│   ├── api_client.py         # Cliente HTTP con headers personalizados
-│   ├── benchmark_resolver.py # Resolutor dinámico de catálogo EVXL y URLs
-│   ├── config.py             # Manejo de persistencia y config.json
-│   ├── extractor.py          # Extractor Regex y parseo de entradas
-│   └── playlist_service.py   # Lógica de cálculo, fallback y generación JSON
+│   ├── api_client.py         # HTTP client with required headers and error handling
+│   ├── benchmark_resolver.py # Dynamic EVXL catalog resolver and URL parser
+│   ├── config.py             # Configuration persistence and config.json management
+│   ├── extractor.py          # Regex extractors and input parsing
+│   └── playlist_service.py   # Continuous score computation, fallback logic & JSON generation
 ├── ui/
 │   ├── __init__.py
-│   └── app.py                # Ventana principal CustomTkinter y threading
+│   └── app.py                # Main CustomTkinter UI and background worker thread
 ├── tests/
-│   ├── test_pipeline.py      # Test de integración con endpoints reales
-│   └── test_unit.py          # Pruebas unitarias de extractor y lógica
+│   ├── test_pipeline.py      # End-to-end integration test with live endpoints
+│   └── test_unit.py          # Unit tests for extractors, sanitizer, and resolvers
 ├── requirements.txt
-├── main.py                   # Punto de entrada
+├── main.py                   # Application entry point
 └── README.md
 ```
 
@@ -58,14 +59,14 @@ KPA/
 
 ## Installation and Usage
 
-### 1. Activate the virtual environment and install dependencies
+### 1. Set Up Virtual Environment & Dependencies
 
 ```powershell
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Run the application
+### 2. Run the Application
 
 ```powershell
 python main.py
@@ -75,8 +76,14 @@ python main.py
 
 ## Tests
 
-To run the unit tests:
+To run the automated unit test suite:
 
 ```powershell
 python -m unittest discover tests
+```
+
+To run the live pipeline integration test:
+
+```powershell
+python tests/test_pipeline.py
 ```

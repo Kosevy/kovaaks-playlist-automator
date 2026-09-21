@@ -1,25 +1,33 @@
-# Entorno virtual
+# Virtual environment
 .venv/
 env/
 venv/
 ENV/
 
-# Python cache
+# Python cache & artifacts
 __pycache__/
 *.py[cod]
 *$py.class
+*.log
 
-# Configuración local (evita subir tu Steam ID / rutas privadas)
+# Sensitive & local configs (Steam ID, local paths, cache)
 config.json
 .benchmarks_cache.json
+.env
+.env.*
+*.local
 
-# IDEs y editores
+# Tests with personal user data / benchmarks
+tests/
+kovaaks_updater.py
+
+# IDEs & editors
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Archivos de pruebas / temporales
+# Test coverage & caches
 .pytest_cache/
 .coverage
 htmlcov/

@@ -95,7 +95,7 @@ class BenchmarkResolver:
             raise ValueError(
                 f"No se pudo interpretar el Benchmark ingresado: '{cleaned}'. "
                 "Asegúrate de ingresar un ID numérico o un enlace de EVXL válido "
-                "(ej. https://evxl.app/u/crimstag/Viscose%20Benchmarks%20S2/Medium?tab=charts)."
+                "(ej. https://evxl.app/u/{usuario}/{benchmark}/{dificultad}?tab=charts)."
             )
 
         author, bench_name, difficulty = parsed_url
@@ -157,12 +157,12 @@ class BenchmarkResolver:
         """
         Extrae (author, benchmark_name, difficulty) de una URL de EVXL.
         Ejemplos:
-          - https://evxl.app/u/crimstag/Viscose%20Benchmarks%20S2/Medium?tab=charts
-            -> ('crimstag', 'Viscose Benchmarks S2', 'Medium')
-          - https://evxl.app/benchmarks/Viscose%20Benchmarks%20S2/Medium
-            -> (None, 'Viscose Benchmarks S2', 'Medium')
-          - Viscose Benchmarks S2/Medium (texto plano)
-            -> (None, 'Viscose Benchmarks S2', 'Medium')
+          - https://evxl.app/u/{usuario}/{benchmark_name}/{dificultad}?tab=charts
+            -> ('usuario', 'benchmark_name', 'dificultad')
+          - https://evxl.app/benchmarks/{benchmark_name}/{dificultad}
+            -> (None, 'benchmark_name', 'dificultad')
+          - {benchmark_name}/{dificultad} (texto plano)
+            -> (None, 'benchmark_name', 'dificultad')
         """
         if "://" in url:
             parsed = urlparse(url)
@@ -315,7 +315,7 @@ class BenchmarkResolver:
         """
         Resuelve un identificador de usuario a su Steam ID64 de 17 dígitos.
         Si ya tiene 17 dígitos, lo retorna directamente.
-        Si es un nombre de usuario / vanity (ej. 'crimstag'), consulta /api/steam de EVXL.
+        Si es un nombre de usuario / vanity (ej. 'username'), consulta /api/steam de EVXL.
         """
         if not identifier:
             return None
@@ -340,3 +340,4 @@ class BenchmarkResolver:
             pass
 
         return None
+

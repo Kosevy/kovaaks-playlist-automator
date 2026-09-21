@@ -19,7 +19,7 @@ def extract_steam_id(raw_input: str) -> str:
     if not match:
         raise ValueError(
             "Steam ID inválido: Se requieren exactamente 17 dígitos consecutivos "
-            "(ej. 76561198444816419 o https://steamcommunity.com/profiles/76561198444816419)."
+            "(ej. 76561198000000000 o https://steamcommunity.com/profiles/76561198000000000)."
         )
     return match.group(1)
 
