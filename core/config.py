@@ -2,6 +2,8 @@ import json
 import os
 from typing import Dict, Any
 
+from core.i18n import detect_system_language
+
 DEFAULT_STEAM_PLAYLIST_PATH = r"C:\Program Files (x86)\Steam\steamapps\common\FPSAimTrainer\FPSAimTrainer\Saved\SaveGames\Playlists"
 
 CONFIG_FILE_NAME = "config.json"
@@ -10,7 +12,15 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "steam_input": "",
     "benchmark_input": "",
     "playlist_dir": DEFAULT_STEAM_PLAYLIST_PATH if os.path.isdir(DEFAULT_STEAM_PLAYLIST_PATH) else "",
-    "playlist_name": "improve-weaknesses"
+    "playlist_name": "improve-weaknesses",
+    "language": detect_system_language(),
+    "monitor_enabled": True,
+    "auto_copy_sens": True,
+    "preferred_copy_format": "cm360",
+    "notify_early_transition": True,
+    "auto_close_overlay": False,
+    "auto_close_seconds": 8,
+    "overlay_corner": "top_right"
 }
 
 
