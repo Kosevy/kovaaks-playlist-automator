@@ -42,7 +42,7 @@ A desktop application built in Python with **CustomTkinter** that automates stat
   - Automatically copies the recommended sensitivity to the Windows clipboard upon scenario switch.
 - **Real-Time Highscore & Multi-Tier EVXL Benchmark Bar**:
   - Compares every completed run against your baseline benchmark scores.
-  - Displays a celebration overlay with the multi-tier segmented progress bar using official EVXL rank colors (*Cinnabar* to *Fuchsia*).
+  - Displays a celebration overlay with the multi-tier segmented progress bar using official EVXL rank colors (_Cinnabar_ to _Fuchsia_).
   - Shows score gain ($+\Delta\text{ pts}$), distance to next rank, and updated overall benchmark completion percentage without opening a web browser.
 - **Full Internationalization (i18n - Spanish & English)**:
   - Complete bilingual support for both Spanish (`es`) and English (`en`) covering all UI tabs, input fields, buttons, log feeds, dialogs, and floating overlays.
@@ -78,12 +78,6 @@ KPA/
 │   ├── test_kovaaks_detector.py  # Unit tests for paths, DPI, and sensitivity math
 │   ├── test_pipeline.py          # End-to-end integration test with live endpoints
 │   └── test_unit.py              # Unit tests for extractors, sanitizer, and resolvers
-├── requirements.txt
-├── main.py                   # Application entry point
-└── README.md
-```
-│   ├── test_pipeline.py      # End-to-end integration test with live endpoints
-│   └── test_unit.py          # Unit tests for extractors, sanitizer, and resolvers
 ├── requirements.txt
 ├── main.py                   # Application entry point
 └── README.md
