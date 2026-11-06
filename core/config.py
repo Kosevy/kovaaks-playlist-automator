@@ -20,7 +20,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "notify_early_transition": True,
     "auto_close_overlay": False,
     "auto_close_seconds": 8,
-    "overlay_corner": "top_right"
+    "overlay_corner": "top_right",
+    "overlay_monitor": 0,
+    "overlay_remember_drag": True,
+    "overlay_custom_x": None,
+    "overlay_custom_y": None
 }
 
 

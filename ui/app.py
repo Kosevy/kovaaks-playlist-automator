@@ -15,7 +15,7 @@ from core.kovaaks_detector import KovaaksDetector
 from core.benchmark_tracker import BenchmarkTracker, HighscoreResult
 from core.game_monitor import GameMonitor
 from core.i18n import t, get_i18n, detect_system_language
-from ui.overlay import SensOverlayWindow, HighscoreOverlayWindow
+from ui.overlay import SensOverlayWindow, HighscoreOverlayWindow, get_system_monitors
 
 
 class KPAApp(ctk.CTk):
@@ -436,6 +436,52 @@ class KPAApp(ctk.CTk):
         )
         self.textbox_monitor_log.grid(row=1, column=0, padx=12, pady=(4, 12), sticky="nsew")
 
+    def _get_monitor_display_names(self) -> list[str]:
+        mons = get_system_monitors()
+        names = []
+        for idx, m in enumerate(mons):
+            prim = f" {t('settings.monitor_primary_suffix')}" if m["is_primary"] else ""
+            names.append(f"Monitor {idx + 1}{prim} [{m['width']}x{m['height']}]")
+        return names
+
+    def _update_monitor_menu_selection(self):
+        names = self._get_monitor_display_names()
+        if hasattr(self, "menu_monitor"):
+            self.menu_monitor.configure(values=names)
+            saved_idx = int(self.config_data.get("overlay_monitor", 0))
+            if 0 <= saved_idx < len(names):
+                self.menu_monitor.set(names[saved_idx])
+            elif names:
+                self.menu_monitor.set(names[0])
+
+    def _get_overlay_coords_or_none(self) -> Optional[tuple[int, int]]:
+        if self.config_data.get("overlay_remember_drag", True):
+            x = self.config_data.get("overlay_custom_x")
+            y = self.config_data.get("overlay_custom_y")
+            if x is not None and y is not None:
+                return (int(x), int(y))
+        return None
+
+    def _on_overlay_dragged(self, new_x: int, new_y: int):
+        if self.config_data.get("overlay_remember_drag", True):
+            self.config_data["overlay_custom_x"] = new_x
+            self.config_data["overlay_custom_y"] = new_y
+            try:
+                self.config_manager.save_config(self.config_data)
+            except Exception:
+                pass
+
+    def _reset_overlay_position(self):
+        self.config_data["overlay_custom_x"] = None
+        self.config_data["overlay_custom_y"] = None
+        try:
+            self.config_manager.save_config(self.config_data)
+        except Exception:
+            pass
+        if hasattr(self, "lbl_reset_status"):
+            self.lbl_reset_status.configure(text=t("settings.pos_reset_done"), text_color="#9ECE6A")
+            self.after(2000, lambda: self.lbl_reset_status.configure(text=""))
+
     def _build_settings_tab(self):
         tab = self.tab_settings
         tab.grid_columnconfigure(0, weight=1)
@@ -522,13 +568,29 @@ class KPAApp(ctk.CTk):
         self.entry_auto_close_sec.grid(row=row, column=1, padx=(0, 20), pady=8, sticky="w")
         row += 1
 
-        # 6. Esquina de posicionamiento
+        # 6. Selección de Pantalla / Monitor para Overlays
+        self.lbl_monitor = ctk.CTkLabel(
+            settings_frame,
+            text=t("settings.monitor_select_label"),
+            font=ctk.CTkFont(weight="bold")
+        )
+        self.lbl_monitor.grid(row=row, column=0, padx=(20, 10), pady=8, sticky="w")
+
+        self.menu_monitor = ctk.CTkOptionMenu(
+            settings_frame,
+            values=self._get_monitor_display_names(),
+            width=220
+        )
+        self.menu_monitor.grid(row=row, column=1, padx=(0, 20), pady=8, sticky="w")
+        row += 1
+
+        # 7. Esquina de posicionamiento
         self.lbl_corner = ctk.CTkLabel(
             settings_frame,
             text=t("settings.corner_label"),
             font=ctk.CTkFont(weight="bold")
         )
-        self.lbl_corner.grid(row=row, column=0, padx=(20, 10), pady=(8, 15), sticky="w")
+        self.lbl_corner.grid(row=row, column=0, padx=(20, 10), pady=8, sticky="w")
 
         self.menu_corner = ctk.CTkOptionMenu(
             settings_frame,
@@ -539,7 +601,67 @@ class KPAApp(ctk.CTk):
                 t("settings.corner_bottom_left")
             ]
         )
-        self.menu_corner.grid(row=row, column=1, padx=(0, 20), pady=(8, 15), sticky="w")
+        self.menu_corner.grid(row=row, column=1, padx=(0, 20), pady=8, sticky="w")
+        row += 1
+
+        # 8. Recordar posición personalizada al arrastrar
+        self.switch_remember_drag = ctk.CTkSwitch(
+            settings_frame,
+            text=t("settings.remember_drag_switch"),
+            font=ctk.CTkFont(weight="bold")
+        )
+        self.switch_remember_drag.grid(row=row, column=0, columnspan=2, padx=20, pady=8, sticky="w")
+        row += 1
+
+        # 9. Botón para restablecer posición personalizada
+        reset_box = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        reset_box.grid(row=row, column=0, columnspan=2, padx=20, pady=6, sticky="w")
+
+        self.btn_reset_pos = ctk.CTkButton(
+            reset_box,
+            text=t("settings.btn_reset_pos"),
+            width=170,
+            height=28,
+            corner_radius=6,
+            fg_color="#24283B",
+            hover_color="#3B4261",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._reset_overlay_position
+        )
+        self.btn_reset_pos.pack(side="left", padx=(0, 12))
+
+        self.lbl_reset_status = ctk.CTkLabel(
+            reset_box,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="#9ECE6A"
+        )
+        self.lbl_reset_status.pack(side="left")
+        row += 1
+
+        # 10. Sugerencias y Tips de Display (better-ui)
+        tips_frame = ctk.CTkFrame(settings_frame, corner_radius=8, fg_color="#1F2335", border_width=1, border_color="#292E42")
+        tips_frame.grid(row=row, column=0, columnspan=2, padx=20, pady=(10, 15), sticky="ew")
+
+        self.lbl_drag_hint = ctk.CTkLabel(
+            tips_frame,
+            text=t("settings.drag_hint"),
+            font=ctk.CTkFont(size=11),
+            text_color="#7AA2F7",
+            wraplength=680,
+            justify="left"
+        )
+        self.lbl_drag_hint.pack(anchor="w", padx=12, pady=(8, 4))
+
+        self.lbl_fullscreen_tip = ctk.CTkLabel(
+            tips_frame,
+            text=t("settings.fullscreen_tip"),
+            font=ctk.CTkFont(size=11),
+            text_color="#9AA5CE",
+            wraplength=680,
+            justify="left"
+        )
+        self.lbl_fullscreen_tip.pack(anchor="w", padx=12, pady=(0, 8))
         row += 1
 
         # Tarjeta de Pruebas de Overlays
@@ -671,8 +793,10 @@ class KPAApp(ctk.CTk):
         self.switch_early_notify.configure(text=t("settings.early_notify_switch"))
         self.switch_auto_close.configure(text=t("settings.auto_close_switch"))
         self.lbl_secs.configure(text=t("settings.auto_close_secs_label"))
-        self.lbl_corner.configure(text=t("settings.corner_label"))
+        self.lbl_monitor.configure(text=t("settings.monitor_select_label"))
+        self._update_monitor_menu_selection()
 
+        self.lbl_corner.configure(text=t("settings.corner_label"))
         corner_opts = [
             t("settings.corner_top_right"),
             t("settings.corner_top_left"),
@@ -681,6 +805,11 @@ class KPAApp(ctk.CTk):
         ]
         self.menu_corner.configure(values=corner_opts)
         self._update_corner_menu_selection()
+
+        self.switch_remember_drag.configure(text=t("settings.remember_drag_switch"))
+        self.btn_reset_pos.configure(text=t("settings.btn_reset_pos"))
+        self.lbl_drag_hint.configure(text=t("settings.drag_hint"))
+        self.lbl_fullscreen_tip.configure(text=t("settings.fullscreen_tip"))
 
         self.lbl_test_title.configure(text=t("settings.test_section_title"))
         self.lbl_test_desc.configure(text=t("settings.test_section_desc"))
@@ -740,6 +869,10 @@ class KPAApp(ctk.CTk):
         self.entry_auto_close_sec.insert(0, secs)
 
         self._update_corner_menu_selection()
+        self._update_monitor_menu_selection()
+
+        rem_drag = self.config_data.get("overlay_remember_drag", True)
+        self.switch_remember_drag.select() if rem_drag else self.switch_remember_drag.deselect()
 
         self._append_text(t("generator.initial_banner"))
 
@@ -761,6 +894,15 @@ class KPAApp(ctk.CTk):
         except ValueError:
             sec_val = 8
 
+        monitor_idx = 0
+        if hasattr(self, "menu_monitor"):
+            mon_str = self.menu_monitor.get()
+            if "Monitor " in mon_str:
+                try:
+                    monitor_idx = int(mon_str.split("Monitor ")[1].split(" ")[0]) - 1
+                except Exception:
+                    monitor_idx = 0
+
         self.config_data.update({
             "steam_input": self.entry_steam.get().strip(),
             "benchmark_input": self.entry_benchmark.get().strip(),
@@ -773,6 +915,8 @@ class KPAApp(ctk.CTk):
             "auto_close_overlay": self.switch_auto_close.get() == 1,
             "auto_close_seconds": sec_val,
             "overlay_corner": corner_key,
+            "overlay_monitor": max(0, monitor_idx),
+            "overlay_remember_drag": self.switch_remember_drag.get() == 1,
             "monitor_enabled": self.game_monitor.is_monitoring
         })
 
@@ -996,6 +1140,9 @@ class KPAApp(ctk.CTk):
             if self.active_sens_overlay and self.active_sens_overlay.winfo_exists():
                 self.active_sens_overlay.close_overlay()
 
+            monitor_idx = int(self.config_data.get("overlay_monitor", 0))
+            custom_coords = self._get_overlay_coords_or_none()
+
             self.active_sens_overlay = SensOverlayWindow(
                 parent=self,
                 scenario_name=next_scenario,
@@ -1008,7 +1155,10 @@ class KPAApp(ctk.CTk):
                 auto_close=self.config_data.get("auto_close_overlay", False),
                 auto_close_seconds=int(self.config_data.get("auto_close_seconds", 8)),
                 corner=self.config_data.get("overlay_corner", "top_right"),
-                is_early=is_early
+                monitor_index=monitor_idx,
+                custom_coords=custom_coords,
+                is_early=is_early,
+                on_position_changed=self._on_overlay_dragged
             )
 
         self.after(0, update)
@@ -1030,12 +1180,18 @@ class KPAApp(ctk.CTk):
             if self.active_highscore_overlay and self.active_highscore_overlay.winfo_exists():
                 self.active_highscore_overlay.close_overlay()
 
+            monitor_idx = int(self.config_data.get("overlay_monitor", 0))
+            custom_coords = self._get_overlay_coords_or_none()
+
             self.active_highscore_overlay = HighscoreOverlayWindow(
                 parent=self,
                 result=result,
                 auto_close=self.config_data.get("auto_close_overlay", False),
                 auto_close_seconds=int(self.config_data.get("auto_close_seconds", 10)),
-                corner=self.config_data.get("overlay_corner", "top_right")
+                corner=self.config_data.get("overlay_corner", "top_right"),
+                monitor_index=monitor_idx,
+                custom_coords=custom_coords,
+                on_position_changed=self._on_overlay_dragged
             )
 
         self.after(0, update)
@@ -1051,6 +1207,9 @@ class KPAApp(ctk.CTk):
         if self.active_sens_overlay and self.active_sens_overlay.winfo_exists():
             self.active_sens_overlay.close_overlay()
 
+        monitor_idx = int(self.config_data.get("overlay_monitor", 0))
+        custom_coords = self._get_overlay_coords_or_none()
+
         self.active_sens_overlay = SensOverlayWindow(
             parent=self,
             scenario_name="Smoothsphere Viscose (Test)",
@@ -1063,7 +1222,10 @@ class KPAApp(ctk.CTk):
             auto_close=self.config_data.get("auto_close_overlay", False),
             auto_close_seconds=int(self.config_data.get("auto_close_seconds", 8)),
             corner=self.config_data.get("overlay_corner", "top_right"),
-            is_early=False
+            monitor_index=monitor_idx,
+            custom_coords=custom_coords,
+            is_early=False,
+            on_position_changed=self._on_overlay_dragged
         )
 
     def _test_highscore_overlay(self):
@@ -1103,12 +1265,18 @@ class KPAApp(ctk.CTk):
         if self.active_highscore_overlay and self.active_highscore_overlay.winfo_exists():
             self.active_highscore_overlay.close_overlay()
 
+        monitor_idx = int(self.config_data.get("overlay_monitor", 0))
+        custom_coords = self._get_overlay_coords_or_none()
+
         self.active_highscore_overlay = HighscoreOverlayWindow(
             parent=self,
             result=dummy_result,
             auto_close=self.config_data.get("auto_close_overlay", False),
             auto_close_seconds=int(self.config_data.get("auto_close_seconds", 10)),
-            corner=self.config_data.get("overlay_corner", "top_right")
+            corner=self.config_data.get("overlay_corner", "top_right"),
+            monitor_index=monitor_idx,
+            custom_coords=custom_coords,
+            on_position_changed=self._on_overlay_dragged
         )
 
     # --- GENERACIÓN DE PLAYLISTS ORIGINAL ---
