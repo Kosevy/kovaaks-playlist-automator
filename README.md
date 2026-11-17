@@ -1,5 +1,7 @@
 # KPA - KovaaK's Playlist Automator
 
+[![Tests](https://github.com/Kosevy/kovaaks-playlist-automator/actions/workflows/tests.yml/badge.svg)](https://github.com/Kosevy/kovaaks-playlist-automator/actions/workflows/tests.yml)
+
 A desktop application built in Python with **CustomTkinter** that automates stats extraction from the [evxl.app](https://evxl.app) platform and KovaaK's backend. It analyzes your benchmark performance and generates native KovaaK's playlist files (`.json`) containing the 5 scenarios where you have the highest potential for improvement.
 
 ---

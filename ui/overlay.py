@@ -87,7 +87,7 @@ def get_system_monitors() -> List[Dict[str, Any]]:
         pass
 
     if not monitors:
-        # Fallback seguro
+        # Fallback seguro en entornos sin soporte Win32
         monitors = [{
             "handle": None,
             "is_primary": True,
@@ -115,18 +115,26 @@ def calculate_corner_position(
     width: int = 380,
     height: int = 195,
     corner: str = "top_right",
-    custom_coords: Optional[tuple[int, int]] = None
+    custom_coords: Optional[tuple[int, int]] = None,
+    y_offset: int = 0
 ) -> tuple[int, int]:
     """
     Calcula las coordenadas X, Y según el monitor y la esquina deseada,
-    o retorna las coordenadas personalizadas si el usuario reubicó el overlay.
+    aplicando un desplazamiento vertical (y_offset) para apilar múltiples overlays.
     """
-    if custom_coords is not None:
-        return custom_coords
-
     monitors = get_system_monitors()
     idx = max(0, min(len(monitors) - 1, monitor_index))
     m = monitors[idx]
+
+    if custom_coords is not None:
+        cx, cy = custom_coords
+        if y_offset > 0:
+            if cy + height + y_offset > m["bottom"] - 20:
+                y = max(m["top"] + 10, cy - y_offset)
+            else:
+                y = cy + y_offset
+            return cx, y
+        return cx, cy
 
     m_left = m["left"]
     m_top = m["top"]
@@ -137,13 +145,19 @@ def calculate_corner_position(
     margin_y = 32
 
     if corner == "top_left":
-        return m_left + margin_x, m_top + margin_y
+        x = m_left + margin_x
+        y = m_top + margin_y + y_offset
     elif corner == "bottom_left":
-        return m_left + margin_x, m_top + m_h - height - margin_y - 48
+        x = m_left + margin_x
+        y = m_top + m_h - height - margin_y - 48 - y_offset
     elif corner == "bottom_right":
-        return m_left + m_w - width - margin_x, m_top + m_h - height - margin_y - 48
+        x = m_left + m_w - width - margin_x
+        y = m_top + m_h - height - margin_y - 48 - y_offset
     else:  # top_right por defecto
-        return m_left + m_w - width - margin_x, m_top + margin_y
+        x = m_left + m_w - width - margin_x
+        y = m_top + margin_y + y_offset
+
+    return x, y
 
 
 def apply_win32_overlay_styles(window: ctk.CTkToplevel, x: int, y: int, width: int, height: int):
@@ -151,7 +165,6 @@ def apply_win32_overlay_styles(window: ctk.CTkToplevel, x: int, y: int, width: i
     Aplica estilos Win32 para garantizar que la ventana flote por encima de juegos (HWND_TOPMOST)
     y no robe el foco de entrada del ratón ni del teclado (WS_EX_NOACTIVATE).
     """
-    # 1. Asegurar topmost a nivel de Tkinter
     try:
         window.attributes("-topmost", True)
     except Exception:
@@ -160,19 +173,15 @@ def apply_win32_overlay_styles(window: ctk.CTkToplevel, x: int, y: int, width: i
     try:
         window.update_idletasks()
         user32 = ctypes.windll.user32
-
-        # 2. Obtener el HWND real de nivel superior de Windows (GA_ROOT = 2)
         inner_hwnd = window.winfo_id()
         os_hwnd = user32.GetAncestor(inner_hwnd, GA_ROOT)
         if not os_hwnd:
             os_hwnd = user32.GetParent(inner_hwnd) or inner_hwnd
 
-        # 3. Aplicar estilos extendidos en el HWND del SO
         current_style = user32.GetWindowLongW(os_hwnd, GWL_EXSTYLE)
         new_style = current_style | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
         user32.SetWindowLongW(os_hwnd, GWL_EXSTYLE, new_style)
 
-        # 4. Establecer posición y HWND_TOPMOST explícito en la jerarquía Z de Windows
         user32.SetWindowPos(
             os_hwnd,
             HWND_TOPMOST,
@@ -194,76 +203,83 @@ def apply_win32_overlay_styles(window: ctk.CTkToplevel, x: int, y: int, width: i
         pass
 
 
-class SensOverlayWindow(ctk.CTkToplevel):
+class BaseOverlayWindow(ctk.CTkToplevel):
     """
-    Ventana emergente que muestra la sensibilidad recomendada al pasar de escenario,
-    diseñada bajo la guía de better-ui, arrastrable con el ratón y garantizando
-    no minimizar ni robar foco al juego.
+    Clase base para ventanas flotantes (HUD overlays) no intrusivas en KovaaK's.
+    Centraliza estilos Win32, libre arrastre con ratón, mantenimiento de capas topmost,
+    detección de hover y ciclo de vida de cuenta regresiva de auto-cierre.
     """
 
     def __init__(
         self,
         parent: ctk.CTk,
-        scenario_name: str,
-        cm360_val: float,
-        ingame_sens_val: Optional[float] = None,
-        scale_name: Optional[str] = None,
-        dpi: Optional[int] = None,
-        auto_copied: bool = True,
-        preferred_copy_format: str = "cm360",
+        width: int,
+        height: int,
         auto_close: bool = False,
         auto_close_seconds: int = 8,
         corner: str = "top_right",
         monitor_index: int = 0,
         custom_coords: Optional[tuple[int, int]] = None,
-        is_early: bool = False,
+        y_offset: int = 0,
         on_position_changed: Optional[Callable[[int, int], None]] = None
     ):
         super().__init__(parent)
 
-        self.scenario_name = scenario_name
-        self.cm360_val = cm360_val
-        self.ingame_sens_val = ingame_sens_val
-        self.scale_name = scale_name or "Juego"
-        self.dpi = dpi or 1600
-        self.auto_copied = auto_copied
-        self.preferred_copy_format = preferred_copy_format
+        self.width = width
+        self.height = height
         self.auto_close = auto_close
         self.auto_close_seconds = auto_close_seconds
-        self.is_early = is_early
-        self.on_position_changed = on_position_changed
-
         self.remaining_seconds = float(auto_close_seconds)
         self.is_hovered = False
-        self._timer_id = None
-        self._topmost_timer_id = None
+        self.on_position_changed = on_position_changed
+
+        self._timer_id: Optional[str] = None
+        self._topmost_timer_id: Optional[str] = None
         self._drag_start_x = 0
         self._drag_start_y = 0
 
-        # Configuración de ventana
+        # Configuración base de ventana
         self.overrideredirect(True)
         self.configure(fg_color="#13141F")
 
-        # Dimensiones y posicionamiento
-        w, h = 380, 195
-        pos_x, pos_y = calculate_corner_position(monitor_index, w, h, corner, custom_coords)
-        self.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+        # Geometría con soporte para y_offset
+        pos_x, pos_y = calculate_corner_position(
+            monitor_index=monitor_index,
+            width=width,
+            height=height,
+            corner=corner,
+            custom_coords=custom_coords,
+            y_offset=y_offset
+        )
+        self.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
 
-        self._build_ui()
-        apply_win32_overlay_styles(self, pos_x, pos_y, w, h)
+        # Marco exterior común (better-ui: radius 12, dark tokyo night)
+        self.outer_frame = ctk.CTkFrame(
+            self,
+            corner_radius=12,
+            fg_color="#181926",
+            border_width=1,
+            border_color="#2E334A"
+        )
+        self.outer_frame.pack(fill="both", expand=True, padx=2, pady=2)
 
-        # Eventos para pausar auto-cierre si el ratón está encima
+        # Aplicar estilos Win32
+        apply_win32_overlay_styles(self, pos_x, pos_y, width, height)
+
+        # Eventos para pausar auto-cierre con hover
         self.bind("<Enter>", self._on_mouse_enter)
         self.bind("<Leave>", self._on_mouse_leave)
 
-        # Hacer que la ventana sea arrastrable desde los bordes y cabecera
+        # Hacer arrastrable la ventana desde el borde exterior
         self._make_draggable(self)
         self._make_draggable(self.outer_frame)
+
+        # Subclases construyen sus widgets específicos
+        self._build_ui()
 
         if self.auto_close:
             self._start_countdown()
 
-        # Refrescar periódicamente la condición topmost para garantizar visibilidad continua
         self._keep_topmost()
 
     def _make_draggable(self, widget: tk.Misc):
@@ -312,23 +328,17 @@ class SensOverlayWindow(ctk.CTkToplevel):
             pass
         self._topmost_timer_id = self.after(1500, self._keep_topmost)
 
-    def _build_ui(self):
-        # Marco exterior con radio 12 y borde sutil
-        self.outer_frame = ctk.CTkFrame(
-            self,
-            corner_radius=12,
-            fg_color="#181926",
-            border_width=1,
-            border_color="#2E334A"
-        )
-        self.outer_frame.pack(fill="both", expand=True, padx=2, pady=2)
-
-        # Fila superior: Ícono de arrastre, Badge de escenario y Botón de cierre
+    def _build_top_bar(
+        self,
+        badge_text: str,
+        badge_color: str,
+        badge_size: int = 10
+    ) -> tuple[ctk.CTkFrame, ctk.CTkLabel, ctk.CTkButton]:
+        """Crea la fila superior común con grip de arrastre, badge y botón de cierre."""
         top_bar = ctk.CTkFrame(self.outer_frame, fg_color="transparent")
         top_bar.pack(fill="x", padx=14, pady=(10, 4))
         self._make_draggable(top_bar)
 
-        # Grip visual para indicar que se puede arrastrar (better-ui)
         lbl_grip = ctk.CTkLabel(
             top_bar,
             text="⋮⋮",
@@ -338,12 +348,10 @@ class SensOverlayWindow(ctk.CTkToplevel):
         lbl_grip.pack(side="left", padx=(0, 6))
         self._make_draggable(lbl_grip)
 
-        badge_text = t("overlays.sens_badge_next") if not self.is_early else t("overlays.sens_badge_early")
-        badge_color = "#3D59A1" if not self.is_early else "#9D7CD8"
         lbl_badge = ctk.CTkLabel(
             top_bar,
             text=badge_text,
-            font=ctk.CTkFont(size=10, weight="bold"),
+            font=ctk.CTkFont(size=badge_size, weight="bold"),
             text_color=badge_color
         )
         lbl_badge.pack(side="left")
@@ -363,6 +371,135 @@ class SensOverlayWindow(ctk.CTkToplevel):
             command=self.close_overlay
         )
         btn_close.pack(side="right")
+
+        return top_bar, lbl_badge, btn_close
+
+    def _build_countdown_footer(self) -> Optional[ctk.CTkLabel]:
+        """Crea el label inferior de cuenta regresiva si el auto-cierre está activo."""
+        if self.auto_close:
+            lbl = ctk.CTkLabel(
+                self.outer_frame,
+                text=t("overlays.auto_close_countdown", secs=int(self.remaining_seconds)),
+                font=ctk.CTkFont(size=10),
+                text_color="#565F89"
+            )
+            lbl.pack(side="bottom", pady=(0, 4))
+            self._make_draggable(lbl)
+            self.lbl_countdown = lbl
+            return lbl
+        return None
+
+    def _build_ui(self):
+        """Método abstracto que deben implementar las subclases."""
+        raise NotImplementedError
+
+    def _on_mouse_enter(self, _event):
+        self.is_hovered = True
+        if self.auto_close and self.winfo_exists() and hasattr(self, "lbl_countdown") and self.lbl_countdown.winfo_exists():
+            self.lbl_countdown.configure(text=t("overlays.auto_close_paused"), text_color="#7AA2F7")
+
+    def _on_mouse_leave(self, _event):
+        self.is_hovered = False
+        # Restaurar inmediatamente el texto de cuenta regresiva sin esperar al siguiente tick
+        if self.auto_close and self.winfo_exists() and hasattr(self, "lbl_countdown") and self.lbl_countdown.winfo_exists():
+            self.lbl_countdown.configure(
+                text=t("overlays.auto_close_countdown", secs=max(0, int(self.remaining_seconds))),
+                text_color="#565F89"
+            )
+
+    def _start_countdown(self):
+        def tick():
+            if not self.winfo_exists():
+                return
+            if not self.is_hovered:
+                self.remaining_seconds -= 1.0
+                if hasattr(self, "lbl_countdown") and self.lbl_countdown.winfo_exists():
+                    self.lbl_countdown.configure(
+                        text=t("overlays.auto_close_countdown", secs=max(0, int(self.remaining_seconds))),
+                        text_color="#565F89"
+                    )
+                if self.remaining_seconds <= 0:
+                    self.close_overlay()
+                    return
+
+            self._timer_id = self.after(1000, tick)
+
+        self._timer_id = self.after(1000, tick)
+
+    def close_overlay(self):
+        """Cancela timers pendientes de forma segura y destruye la ventana."""
+        if self._timer_id:
+            try:
+                self.after_cancel(self._timer_id)
+            except Exception:
+                pass
+            self._timer_id = None
+
+        if self._topmost_timer_id:
+            try:
+                self.after_cancel(self._topmost_timer_id)
+            except Exception:
+                pass
+            self._topmost_timer_id = None
+
+        if self.winfo_exists():
+            self.destroy()
+
+
+class SensOverlayWindow(BaseOverlayWindow):
+    """
+    Ventana emergente que muestra la sensibilidad recomendada al pasar de escenario,
+    diseñada bajo la guía de better-ui, arrastrable con el ratón y garantizando
+    no minimizar ni robar foco al juego.
+    """
+
+    def __init__(
+        self,
+        parent: ctk.CTk,
+        scenario_name: str,
+        cm360_val: float,
+        ingame_sens_val: Optional[float] = None,
+        scale_name: Optional[str] = None,
+        dpi: Optional[int] = None,
+        auto_copied: bool = True,
+        preferred_copy_format: str = "cm360",
+        auto_close: bool = False,
+        auto_close_seconds: int = 8,
+        corner: str = "top_right",
+        monitor_index: int = 0,
+        custom_coords: Optional[tuple[int, int]] = None,
+        y_offset: int = 0,
+        is_early: bool = False,
+        on_position_changed: Optional[Callable[[int, int], None]] = None
+    ):
+        # Asignar atributos ANTES de super().__init__ porque invoca _build_ui()
+        self.scenario_name = scenario_name
+        self.cm360_val = cm360_val
+        self.ingame_sens_val = ingame_sens_val
+        self.scale_name = scale_name or "Juego"
+        self.dpi = dpi or 1600
+        self.auto_copied = auto_copied
+        self.preferred_copy_format = preferred_copy_format
+        self.is_early = is_early
+
+        super().__init__(
+            parent=parent,
+            width=380,
+            height=195,
+            auto_close=auto_close,
+            auto_close_seconds=auto_close_seconds,
+            corner=corner,
+            monitor_index=monitor_index,
+            custom_coords=custom_coords,
+            y_offset=y_offset,
+            on_position_changed=on_position_changed
+        )
+
+    def _build_ui(self):
+        # Barra superior reutilizable
+        badge_text = t("overlays.sens_badge_next") if not self.is_early else t("overlays.sens_badge_early")
+        badge_color = "#3D59A1" if not self.is_early else "#9D7CD8"
+        self._build_top_bar(badge_text, badge_color, badge_size=10)
 
         # Nombre del escenario
         lbl_scenario = ctk.CTkLabel(
@@ -441,19 +578,11 @@ class SensOverlayWindow(ctk.CTkToplevel):
         )
         self.btn_copy.pack(side="right")
 
-        # Indicador de cuenta regresiva (si auto-cierre está activo)
-        if self.auto_close:
-            self.lbl_countdown = ctk.CTkLabel(
-                self.outer_frame,
-                text=t("overlays.auto_close_countdown", secs=int(self.remaining_seconds)),
-                font=ctk.CTkFont(size=10),
-                text_color="#565F89"
-            )
-            self.lbl_countdown.pack(side="bottom", pady=(0, 4))
-            self._make_draggable(self.lbl_countdown)
+        # Footer con cuenta regresiva si aplica
+        self._build_countdown_footer()
 
     def copy_to_clipboard(self):
-        """Copia el valor seleccionado al portapapeles y ofrece retroalimentación visual."""
+        """Copia el valor seleccionado al portapapeles y ofrece retroalimentación visual segura."""
         if self.preferred_copy_format == "ingame" and self.ingame_sens_val is not None:
             text_to_copy = str(self.ingame_sens_val)
         else:
@@ -466,59 +595,26 @@ class SensOverlayWindow(ctk.CTkToplevel):
         except Exception:
             pass
 
-        # Micro-interacción: cambio de texto y color con reversión suave
+        # Micro-interacción: cambio de texto y color con reversión segura ante cierre anticipado
         self.btn_copy.configure(text=t("overlays.copied_btn"), fg_color="#9ECE6A", text_color="#1A1B26")
         self.lbl_status.configure(text=t("overlays.copy_status_done", text=text_to_copy), text_color="#9ECE6A")
-        self.after(1800, lambda: self.btn_copy.configure(
-            text=t("overlays.copy_btn"),
-            fg_color="#3B4261",
-            text_color="#FFFFFF"
-        ))
 
-    def _on_mouse_enter(self, _event):
-        self.is_hovered = True
-        if self.auto_close and hasattr(self, "lbl_countdown"):
-            self.lbl_countdown.configure(text=t("overlays.auto_close_paused"), text_color="#7AA2F7")
+        def reset_button():
+            if self.winfo_exists() and hasattr(self, "btn_copy") and self.btn_copy.winfo_exists():
+                self.btn_copy.configure(
+                    text=t("overlays.copy_btn"),
+                    fg_color="#3B4261",
+                    text_color="#FFFFFF"
+                )
 
-    def _on_mouse_leave(self, _event):
-        self.is_hovered = False
-
-    def _start_countdown(self):
-        def tick():
-            if not self.is_hovered:
-                self.remaining_seconds -= 1.0
-                if hasattr(self, "lbl_countdown"):
-                    self.lbl_countdown.configure(
-                        text=t("overlays.auto_close_countdown", secs=max(0, int(self.remaining_seconds))),
-                        text_color="#565F89"
-                    )
-                if self.remaining_seconds <= 0:
-                    self.close_overlay()
-                    return
-
-            self._timer_id = self.after(1000, tick)
-
-        self._timer_id = self.after(1000, tick)
-
-    def close_overlay(self):
-        if self._timer_id:
-            try:
-                self.after_cancel(self._timer_id)
-            except Exception:
-                pass
-        if self._topmost_timer_id:
-            try:
-                self.after_cancel(self._topmost_timer_id)
-            except Exception:
-                pass
-        self.destroy()
+        self.after(1800, reset_button)
 
 
-class HighscoreOverlayWindow(ctk.CTkToplevel):
+class HighscoreOverlayWindow(BaseOverlayWindow):
     """
     Ventana emergente no intrusiva que muestra la barra de progreso multicromática de EVXL
     y métricas actualizadas tras alcanzar un nuevo récord personal, arrastrable libremente
-    y con protección anti-ocultamiento.
+    y con protección anti-ocultamiento y canvas responsivo ante DPI.
     """
 
     def __init__(
@@ -530,139 +626,30 @@ class HighscoreOverlayWindow(ctk.CTkToplevel):
         corner: str = "top_right",
         monitor_index: int = 0,
         custom_coords: Optional[tuple[int, int]] = None,
+        y_offset: int = 0,
         on_position_changed: Optional[Callable[[int, int], None]] = None
     ):
-        super().__init__(parent)
+        # Asignar atributos ANTES de super().__init__ porque invoca _build_ui()
         self.result = result
-        self.auto_close = auto_close
-        self.auto_close_seconds = auto_close_seconds
-        self.remaining_seconds = float(auto_close_seconds)
-        self.is_hovered = False
-        self._timer_id = None
-        self._topmost_timer_id = None
-        self._drag_start_x = 0
-        self._drag_start_y = 0
-        self.on_position_changed = on_position_changed
 
-        self.overrideredirect(True)
-        self.configure(fg_color="#13141F")
-
-        # Dimensiones y posición
-        w, h = 420, 275
-        pos_x, pos_y = calculate_corner_position(monitor_index, w, h, corner, custom_coords)
-        self.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
-
-        self._build_ui()
-        apply_win32_overlay_styles(self, pos_x, pos_y, w, h)
-
-        self.bind("<Enter>", self._on_mouse_enter)
-        self.bind("<Leave>", self._on_mouse_leave)
-
-        # Hacer arrastrable desde bordes y fondo
-        self._make_draggable(self)
-        self._make_draggable(self.outer_frame)
-
-        if self.auto_close:
-            self._start_countdown()
-
-        # Mantenimiento activo de topmost
-        self._keep_topmost()
-
-    def _make_draggable(self, widget: tk.Misc):
-        """Asocia eventos del ratón para arrastrar el overlay desde cualquier borde o cabecera."""
-        try:
-            widget.configure(cursor="size_all")
-        except Exception:
-            pass
-        widget.bind("<Button-1>", self._on_drag_start, add="+")
-        widget.bind("<B1-Motion>", self._on_drag_motion, add="+")
-        widget.bind("<ButtonRelease-1>", self._on_drag_end, add="+")
-
-    def _on_drag_start(self, event):
-        self._drag_start_x = event.x_root - self.winfo_x()
-        self._drag_start_y = event.y_root - self.winfo_y()
-
-    def _on_drag_motion(self, event):
-        new_x = event.x_root - self._drag_start_x
-        new_y = event.y_root - self._drag_start_y
-        self.geometry(f"+{new_x}+{new_y}")
-
-    def _on_drag_end(self, event):
-        cur_x = self.winfo_x()
-        cur_y = self.winfo_y()
-        apply_win32_overlay_styles(self, cur_x, cur_y, self.winfo_width(), self.winfo_height())
-        if self.on_position_changed:
-            self.on_position_changed(cur_x, cur_y)
-
-    def _keep_topmost(self):
-        """Mantiene la ventana en la capa HWND_TOPMOST en caso de cambios de foco en KovaaK's."""
-        if not self.winfo_exists():
-            return
-        try:
-            self.attributes("-topmost", True)
-            self.lift()
-            user32 = ctypes.windll.user32
-            os_hwnd = user32.GetAncestor(self.winfo_id(), GA_ROOT)
-            if os_hwnd:
-                user32.SetWindowPos(
-                    os_hwnd,
-                    HWND_TOPMOST,
-                    0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
-                )
-        except Exception:
-            pass
-        self._topmost_timer_id = self.after(1500, self._keep_topmost)
+        super().__init__(
+            parent=parent,
+            width=420,
+            height=275,
+            auto_close=auto_close,
+            auto_close_seconds=auto_close_seconds,
+            corner=corner,
+            monitor_index=monitor_index,
+            custom_coords=custom_coords,
+            y_offset=y_offset,
+            on_position_changed=on_position_changed
+        )
 
     def _build_ui(self):
-        self.outer_frame = ctk.CTkFrame(
-            self,
-            corner_radius=12,
-            fg_color="#181926",
-            border_width=1,
-            border_color="#2E334A"
-        )
-        self.outer_frame.pack(fill="both", expand=True, padx=2, pady=2)
-
-        # Fila superior: Grip, Badge de Highscore y botón cerrar
-        top_bar = ctk.CTkFrame(self.outer_frame, fg_color="transparent")
-        top_bar.pack(fill="x", padx=14, pady=(10, 4))
-        self._make_draggable(top_bar)
-
-        lbl_grip = ctk.CTkLabel(
-            top_bar,
-            text="⋮⋮",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            text_color="#414868"
-        )
-        lbl_grip.pack(side="left", padx=(0, 6))
-        self._make_draggable(lbl_grip)
-
+        # Barra superior reutilizable
         title_text = t("overlays.highscore_title") if not self.result.rank_up else t("overlays.rankup_title")
         title_color = "#E0AF68" if not self.result.rank_up else "#BB9AF7"
-        lbl_badge = ctk.CTkLabel(
-            top_bar,
-            text=title_text,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=title_color
-        )
-        lbl_badge.pack(side="left")
-        self._make_draggable(lbl_badge)
-
-        btn_close = ctk.CTkButton(
-            top_bar,
-            text="✕",
-            width=24,
-            height=24,
-            corner_radius=6,
-            fg_color="#24283B",
-            hover_color="#414868",
-            text_color="#C0CAF5",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            cursor="hand2",
-            command=self.close_overlay
-        )
-        btn_close.pack(side="right")
+        self._build_top_bar(title_text, title_color, badge_size=11)
 
         # Nombre del escenario
         lbl_scenario = ctk.CTkLabel(
@@ -726,19 +713,17 @@ class HighscoreOverlayWindow(ctk.CTkToplevel):
         lbl_bar_header.pack(fill="x", pady=(0, 4))
         self._make_draggable(lbl_bar_header)
 
-        # Canvas para renderizar la barra multicromática con bordes y aguja
-        canvas_h = 16
-        canvas_w = 388
+        # Canvas para renderizar la barra multicromática con redibujado responsivo ante Configure
         self.canvas_bar = tk.Canvas(
             bar_container,
-            width=canvas_w,
-            height=canvas_h,
+            height=16,
             bg="#1F2335",
             highlightthickness=0
         )
         self.canvas_bar.pack(fill="x")
-        self._render_multitier_bar(self.canvas_bar, canvas_w, canvas_h)
         self._make_draggable(self.canvas_bar)
+
+        self.canvas_bar.bind("<Configure>", lambda e: self._render_multitier_bar(self.canvas_bar, e.width, e.height))
 
         # Fila de métricas inferiores: Puntos restantes y progreso global del benchmark
         bottom_metrics = ctk.CTkFrame(self.outer_frame, fg_color="transparent")
@@ -772,19 +757,16 @@ class HighscoreOverlayWindow(ctk.CTkToplevel):
         lbl_overall.pack(side="right")
         self._make_draggable(lbl_overall)
 
-        # Auto-cierre
-        if self.auto_close:
-            self.lbl_countdown = ctk.CTkLabel(
-                self.outer_frame,
-                text=t("overlays.auto_close_countdown", secs=int(self.remaining_seconds)),
-                font=ctk.CTkFont(size=10),
-                text_color="#565F89"
-            )
-            self.lbl_countdown.pack(side="bottom", pady=(0, 4))
-            self._make_draggable(self.lbl_countdown)
+        # Footer con cuenta regresiva si aplica
+        self._build_countdown_footer()
 
     def _render_multitier_bar(self, canvas: tk.Canvas, width: int, height: int):
-        """Renderiza los segmentos de color correspondientes a los rangos del benchmark."""
+        """Renderiza los segmentos de color correspondientes a los rangos del benchmark de forma limpia y responsiva."""
+        if width <= 1 or height <= 1:
+            return
+
+        canvas.delete("all")
+
         rank_maxes = self.result.rank_maxes
         if not rank_maxes:
             canvas.create_rectangle(0, 0, width, height, fill="#3B4261", outline="")
@@ -819,41 +801,3 @@ class HighscoreOverlayWindow(ctk.CTkToplevel):
 
         # Aguja blanca con sombra
         canvas.create_rectangle(cur_x - 2, 0, cur_x + 2, height, fill="#FFFFFF", outline="#000000")
-
-    def _on_mouse_enter(self, _event):
-        self.is_hovered = True
-        if self.auto_close and hasattr(self, "lbl_countdown"):
-            self.lbl_countdown.configure(text=t("overlays.auto_close_paused"), text_color="#7AA2F7")
-
-    def _on_mouse_leave(self, _event):
-        self.is_hovered = False
-
-    def _start_countdown(self):
-        def tick():
-            if not self.is_hovered:
-                self.remaining_seconds -= 1.0
-                if hasattr(self, "lbl_countdown"):
-                    self.lbl_countdown.configure(
-                        text=t("overlays.auto_close_countdown", secs=max(0, int(self.remaining_seconds))),
-                        text_color="#565F89"
-                    )
-                if self.remaining_seconds <= 0:
-                    self.close_overlay()
-                    return
-
-            self._timer_id = self.after(1000, tick)
-
-        self._timer_id = self.after(1000, tick)
-
-    def close_overlay(self):
-        if self._timer_id:
-            try:
-                self.after_cancel(self._timer_id)
-            except Exception:
-                pass
-        if self._topmost_timer_id:
-            try:
-                self.after_cancel(self._topmost_timer_id)
-            except Exception:
-                pass
-        self.destroy()

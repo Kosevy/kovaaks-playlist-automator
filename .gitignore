@@ -17,8 +17,7 @@ config.json
 .env.*
 *.local
 
-# Tests with personal user data / benchmarks
-tests/
+# Local helper scripts
 kovaaks_updater.py
 
 # IDEs & editors
