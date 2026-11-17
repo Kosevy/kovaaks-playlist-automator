@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -28,9 +28,9 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Verify compilation (py_compile)
+      - name: Verify compilation (compileall)
         run: |
-          python -m py_compile main.py core/*.py ui/*.py ui/tabs/*.py tests/*.py
+          python -m compileall -q main.py core ui tests
 
       - name: Run Core Logic Unit Tests Gate
         run: |
