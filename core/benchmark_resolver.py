@@ -6,8 +6,9 @@ from typing import Dict, Any, Optional, List, Tuple
 from urllib.parse import urlparse, unquote
 import requests
 
+from core.config import get_app_base_dir
 
-CACHE_FILE = ".benchmarks_cache.json"
+CACHE_FILE = os.path.join(get_app_base_dir(), ".benchmarks_cache.json")
 CACHE_TTL_SECONDS = 86400  # 24 horas
 
 DEFAULT_HEADERS = {

@@ -1,12 +1,15 @@
+import sys
 import os
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from core.playlist_service import PlaylistService, sanitize_filename, resolve_unique_filepath
 from core.benchmark_tracker import BenchmarkTracker, HighscoreResult
 from core.kovaaks_detector import KovaaksDetector
 from core.extractor import extract_steam_id
+from core.config import get_app_base_dir
 
 
 class TestCoreLogic(unittest.TestCase):
@@ -257,6 +260,23 @@ class TestCoreLogic(unittest.TestCase):
             extract_steam_id("short12345")
         with self.assertRaises(ValueError):
             extract_steam_id("7656119801234567")  # 16 dígitos
+
+    def test_get_app_base_dir(self):
+        """6. Resolución segura de rutas base en modo desarrollo y en modo ejecutable congelado (PyInstaller)."""
+        # A) Modo Desarrollo: sys.frozen es False (o no existe)
+        with patch.object(sys, "frozen", False, create=True):
+            base_dir = get_app_base_dir()
+            self.assertTrue(os.path.isdir(base_dir))
+            # La carpeta base en desarrollo debe contener main.py
+            self.assertTrue(os.path.isfile(os.path.join(base_dir, "main.py")))
+
+        # B) Modo Congelado (PyInstaller): sys.frozen es True
+        expected_dir = os.path.join(tempfile.gettempdir(), "MockAppDir")
+        mock_exe = os.path.join(expected_dir, "KPA-Windows-x64.exe")
+        with patch.object(sys, "frozen", True, create=True):
+            with patch.object(sys, "executable", mock_exe):
+                frozen_base_dir = get_app_base_dir()
+                self.assertEqual(frozen_base_dir, expected_dir)
 
 
 if __name__ == "__main__":

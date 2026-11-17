@@ -30,3 +30,8 @@ kovaaks_updater.py
 .pytest_cache/
 .coverage
 htmlcov/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec

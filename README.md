@@ -72,14 +72,26 @@ KPA/
 │   └── playlist_service.py   # Continuous score computation, fallback logic & JSON generation
 ├── ui/
 │   ├── __init__.py
-│   ├── app.py                # Main Tabbed CustomTkinter UI (Generator, Monitor, Settings)
-│   └── overlay.py            # Non-intrusive Win32 Topmost & No-Activate Overlays
+│   ├── app.py                # Main Tabbed CustomTkinter UI orchestrator
+│   ├── overlay.py            # Non-intrusive Win32 Topmost & No-Activate Overlays
+│   └── tabs/                 # Modular UI tab components
+│       ├── __init__.py
+│       ├── generator_tab.py  # Playlist generator form and output console
+│       ├── monitor_tab.py    # Real-time game status, active session card & live feed
+│       └── settings_tab.py   # Canonical settings, HUD preferences & overlay tests
 ├── tests/
+│   ├── __init__.py
+│   ├── test_core_logic.py        # Isolated core logic test suite (sanitizer, rankup, sens math, sys.frozen)
 │   ├── test_benchmark_tracker.py # Unit tests for benchmark progress and highscore evaluation
 │   ├── test_game_monitor.py      # Unit tests for log parsing and transition triggers
 │   ├── test_kovaaks_detector.py  # Unit tests for paths, DPI, and sensitivity math
+│   ├── test_overlay.py           # Unit tests for overlay geometry and monitors
 │   ├── test_pipeline.py          # End-to-end integration test with live endpoints
 │   └── test_unit.py              # Unit tests for extractors, sanitizer, and resolvers
+├── .github/
+│   └── workflows/
+│       ├── tests.yml             # Ubuntu CI test workflow
+│       └── release.yml           # Automated Windows portable build & GitHub release workflow
 ├── requirements.txt
 ├── main.py                   # Application entry point
 └── README.md
@@ -87,16 +99,26 @@ KPA/
 
 ---
 
-## Installation and Usage
+## Installation & Download
 
-### 1. Set Up Virtual Environment & Dependencies
+### Option 1: Standalone Portable Binary (Recommended for Windows)
+
+No Python installation or command-line setup is required:
+1. Go to the [Releases](https://github.com/Kosevy/kovaaks-playlist-automator/releases) tab.
+2. Download the latest `KPA-Windows-x64.exe`.
+3. Move the `.exe` to any folder of your choice and double-click to run. Your settings (`config.json`) and cache (`.benchmarks_cache.json`) will be created automatically in that same folder.
+
+### Option 2: Run from Source (Developers)
+
+#### 1. Set Up Virtual Environment & Dependencies
 
 ```powershell
+python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Run the Application
+#### 2. Run the Application
 
 ```powershell
 python main.py

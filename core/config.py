@@ -1,3 +1,4 @@
+import sys
 import json
 import os
 from typing import Dict, Any
@@ -6,7 +7,19 @@ from core.i18n import detect_system_language
 
 DEFAULT_STEAM_PLAYLIST_PATH = r"C:\Program Files (x86)\Steam\steamapps\common\FPSAimTrainer\FPSAimTrainer\Saved\SaveGames\Playlists"
 
-CONFIG_FILE_NAME = "config.json"
+
+def get_app_base_dir() -> str:
+    """
+    Retorna el directorio base de la aplicación.
+    - Si se ejecuta como ejecutable congelado (PyInstaller): carpeta donde reside el .exe.
+    - Si se ejecuta en desarrollo / código fuente: directorio raíz del proyecto.
+    """
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+CONFIG_FILE_NAME = os.path.join(get_app_base_dir(), "config.json")
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "steam_input": "",
